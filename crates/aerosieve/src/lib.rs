@@ -18,7 +18,7 @@ pub struct PipelineConfig {
     pub sink_config: SinkConfig,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PipelineStats {
     pub frames_processed: u64,
     pub frames_passed: u64,
@@ -26,19 +26,6 @@ pub struct PipelineStats {
     pub norm_rules_applied: u64,
     pub commits_succeeded: u64,
     pub commits_failed: u64,
-}
-
-impl Default for PipelineStats {
-    fn default() -> Self {
-        Self {
-            frames_processed: 0,
-            frames_passed: 0,
-            frames_rejected: 0,
-            norm_rules_applied: 0,
-            commits_succeeded: 0,
-            commits_failed: 0,
-        }
-    }
 }
 
 pub struct Pipeline {
