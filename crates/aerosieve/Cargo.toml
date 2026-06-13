@@ -1,0 +1,19 @@
+[package]
+name = "aerosieve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+aerosieve-ring = { path = "../aerosieve-ring" }
+aerosieve-acoustic = { path = "../aerosieve-acoustic" }
+aerosieve-lexical = { path = "../aerosieve-lexical" }
+aerosieve-sink = { path = "../aerosieve-sink" }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "pipeline_benchmark"
+harness = false
+path = "../../benches/pipeline_benchmark.rs"

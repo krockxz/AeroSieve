@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/aerosieve-ring",
+    "crates/aerosieve-acoustic",
+    "crates/aerosieve-lexical",
+    "crates/aerosieve-sink",
+    "crates/aerosieve",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"

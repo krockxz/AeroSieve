@@ -1,0 +1,8 @@
+[package]
+name = "aerosieve-acoustic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+dasp = "0.11"
