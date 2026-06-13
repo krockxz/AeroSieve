@@ -6,3 +6,10 @@ license.workspace = true
 
 [dependencies]
 ringbuf = "0.5"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "ring_benchmark"
+harness = false
