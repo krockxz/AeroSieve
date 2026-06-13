@@ -21,19 +21,14 @@ pub struct Rule {
     pub category: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum RuleAction {
+    #[default]
     Replace,
     Format,
     Remove,
     Prefix,
     Suffix,
-}
-
-impl Default for RuleAction {
-    fn default() -> Self {
-        Self::Replace
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +43,7 @@ pub struct RuleEngine {
     rules: Vec<CompiledRule>,
     keywords: AhoCorasick,
     keyword_map: Vec<Vec<usize>>,
+    always_check: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -70,8 +66,8 @@ impl RuleEngine {
 
     pub fn from_rule_set(rule_set: &RuleSet) -> Result<Self, Box<dyn std::error::Error>> {
         let mut rules = Vec::with_capacity(rule_set.rules.len());
-        let mut patterns = Vec::with_capacity(rule_set.rules.len());
         let mut keyword_map: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut always_check = Vec::new();
 
         for (i, rule) in rule_set.rules.iter().enumerate() {
             let regex = Regex::new(&rule.pattern)?;
@@ -83,9 +79,9 @@ impl RuleEngine {
 
             if let Some(keyword) = extract_keyword(&rule.pattern) {
                 keyword_map.entry(keyword).or_default().push(i);
+            } else {
+                always_check.push(i);
             }
-
-            patterns.push(rule.pattern.clone());
         }
 
         let keywords: Vec<String> = keyword_map.keys().cloned().collect();
@@ -101,14 +97,16 @@ impl RuleEngine {
             rules,
             keywords: ac,
             keyword_map,
+            always_check,
         })
     }
 
     pub fn empty() -> Self {
         Self {
             rules: Vec::new(),
-            keywords: AhoCorasick::new(&["\x00"]).expect("empty AC"),
+            keywords: AhoCorasick::new(["\x00"]).expect("empty AC"),
             keyword_map: Vec::new(),
+            always_check: Vec::new(),
         }
     }
 
@@ -124,8 +122,14 @@ impl RuleEngine {
                 RuleAction::Replace => rule.regex.replace_all(&result, &rule.replacement).to_string(),
                 RuleAction::Remove => rule.regex.replace_all(&result, "").to_string(),
                 RuleAction::Format => rule.regex.replace_all(&result, &rule.replacement).to_string(),
-                RuleAction::Prefix => format!("{}{}", rule.replacement, &result),
-                RuleAction::Suffix => format!("{}{}", &result, rule.replacement),
+                RuleAction::Prefix => {
+                    let repl = format!("{}$0", rule.replacement);
+                    rule.regex.replace_all(&result, &repl).to_string()
+                }
+                RuleAction::Suffix => {
+                    let repl = format!("$0{}", rule.replacement);
+                    rule.regex.replace_all(&result, &repl).to_string()
+                }
             };
             if result != prev {
                 rules_applied.push(rule.regex.as_str().to_string());
@@ -149,6 +153,7 @@ impl RuleEngine {
                 }
             }
         }
+        candidates.extend_from_slice(&self.always_check);
         if candidates.is_empty() {
             candidates = (0..self.rules.len()).collect();
         }
@@ -163,16 +168,22 @@ impl RuleEngine {
 }
 
 fn extract_keyword(pattern: &str) -> Option<String> {
-    let keyword = pattern
+    // Strip regex metacharacters: keep only alphanumeric and whitespace,
+    // then find the first span of word chars with 2+ consecutive alphabetic chars.
+    let cleaned: String = pattern
         .chars()
-        .filter(|c| c.is_alphabetic())
-        .take(20)
-        .collect::<String>();
-    if keyword.len() >= 2 {
-        Some(keyword.to_lowercase())
-    } else {
-        None
+        .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+        .collect();
+    for word in cleaned.split_whitespace() {
+        if word.len() >= 2 {
+            let lower = word.to_lowercase();
+            let chars: Vec<char> = lower.chars().collect();
+            if chars.windows(2).any(|w| w[0].is_alphabetic() && w[1].is_alphabetic()) {
+                return Some(lower);
+            }
+        }
     }
+    None
 }
 
 #[cfg(test)]
@@ -271,5 +282,43 @@ rules:
         let result = engine.normalize("5 laakh rupaye aur 2 karod");
         assert!(result.normalized.contains("5 lakh"));
         assert!(result.normalized.contains("2 crore"));
+    }
+
+    #[test]
+    fn test_load_default_rules() {
+        let engine = RuleEngine::from_yaml_file(Path::new("rules/default.yaml"))
+            .expect("failed to load default rules");
+        let result = engine.normalize("yeh ₹500 hai");
+        assert!(result.normalized.contains("rupaye"));
+    }
+
+    #[test]
+    fn test_prefix_action() {
+        let yaml = r#"
+version: 1
+rules:
+  - pattern: '\bhello\b'
+    replacement: 'say '
+    action: Prefix
+    category: test
+"#;
+        let engine = RuleEngine::from_yaml(yaml).unwrap();
+        let result = engine.normalize("hello world");
+        assert_eq!(result.normalized, "say hello world");
+    }
+
+    #[test]
+    fn test_suffix_action() {
+        let yaml = r#"
+version: 1
+rules:
+  - pattern: '\bcompleted\b'
+    replacement: ' done'
+    action: Suffix
+    category: test
+"#;
+        let engine = RuleEngine::from_yaml(yaml).unwrap();
+        let result = engine.normalize("task completed");
+        assert_eq!(result.normalized, "task completed done");
     }
 }
