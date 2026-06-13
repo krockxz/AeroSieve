@@ -1,3 +1,177 @@
-# AeroSieve Default Rules — Hinglish/code-mixed text normalization
 version: 1
-rules: []
+rules:
+  # Currency — INR
+  - pattern: '₹\s*(\d+)'
+    replacement: '$1 rupaye'
+    action: Replace
+    category: currency
+  - pattern: 'Rs\.?\s*(\d+)'
+    replacement: '$1 rupaye'
+    action: Replace
+    category: currency
+  - pattern: '\b(\d+)\s*rupees?\b'
+    replacement: '$1 rupaye'
+    action: Replace
+    category: currency
+  - pattern: '\b(\d+)\s*paise\b'
+    replacement: '$1 paise'
+    action: Format
+    category: currency
+
+  # Hindi number words (common mappings)
+  - pattern: '\b(\d+)\s*(?:hazaar|hazar)\b'
+    replacement: '$1 hazaar'
+    action: Format
+    category: weights
+  - pattern: '\b(\d+)\s*(?:lakh|laakh|lac)\b'
+    replacement: '$1 lakh'
+    action: Format
+    category: weights
+  - pattern: '\b(\d+)\s*(?:crore|karod|caror)\b'
+    replacement: '$1 crore'
+    action: Format
+    category: weights
+
+  # Dates — normalize formats
+  - pattern: '(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})'
+    replacement: '$1-$2-$3'
+    action: Format
+    category: dates
+  - pattern: '(\d{1,2})(?:st|nd|rd|th)\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)'
+    replacement: '$1 $2'
+    action: Format
+    category: dates
+
+  # Common abbreviations
+  - pattern: '\bdr\.?\b'
+    replacement: 'doctor'
+    action: Replace
+    category: abbreviations
+  - pattern: '\bprof\.?\s'
+    replacement: 'professor '
+    action: Replace
+    category: abbreviations
+  - pattern: '\bgovt\.?\s'
+    replacement: 'government '
+    action: Replace
+    category: abbreviations
+  - pattern: '\bdept\.?\s'
+    replacement: 'department '
+    action: Replace
+    category: abbreviations
+  - pattern: '\buniv\.?\s'
+    replacement: 'university '
+    action: Replace
+    category: abbreviations
+  - pattern: '\bvs\.?\s'
+    replacement: 'versus '
+    action: Replace
+    category: abbreviations
+  - pattern: '\betc\.?\b'
+    replacement: 'etcetera'
+    action: Replace
+    category: abbreviations
+  - pattern: '\bi\.e\.?\s'
+    replacement: 'that is '
+    action: Replace
+    category: abbreviations
+  - pattern: '\be\.g\.?\s'
+    replacement: 'for example '
+    action: Replace
+    category: abbreviations
+
+  # Code mixing — common Hinglish patterns
+  - pattern: '\bmain\s+(\w+)\s+raha\s+hu[mn]?\b'
+    replacement: 'I am $1ing'
+    action: Replace
+    category: code_mixing
+  - pattern: '\bmain\s+(\w+)\s+rahi\s+hu[mn]?\b'
+    replacement: 'I am $1ing'
+    action: Replace
+    category: code_mixing
+  - pattern: '\bhum\s+(\w+)\s+rahe\s+hai[nm]?\b'
+    replacement: 'we are $1ing'
+    action: Replace
+    category: code_mixing
+  - pattern: '\bmujhe\s+(\w+)\s+hai\b'
+    replacement: 'I need to $1'
+    action: Replace
+    category: code_mixing
+  - pattern: '\bmujhe\s+(\w+)\s+chahiye\b'
+    replacement: 'I want $1'
+    action: Replace
+    category: code_mixing
+
+  # Cleanup — HTML/XML tags
+  - pattern: '<[^>]+>'
+    replacement: ''
+    action: Remove
+    category: cleanup
+  - pattern: '&[a-z]+;'
+    replacement: ' '
+    action: Remove
+    category: cleanup
+
+  # Whitespace normalization
+  - pattern: '\s+'
+    replacement: ' '
+    action: Replace
+    category: whitespace
+  - pattern: '^\s+|\s+$'
+    replacement: ''
+    action: Replace
+    category: whitespace
+
+  # Common Hindi words normalize spelling
+  - pattern: '\b(?:hein|hai|h)\b'
+    replacement: 'hai'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:hu|hoon|hun)\b'
+    replacement: 'hoon'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:kya|kaya)\b'
+    replacement: 'kya'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:acha|accha|achchha)\b'
+    replacement: 'achha'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:koi|koyi)\b'
+    replacement: 'koi'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:bahut|bahaut|bohot)\b'
+    replacement: 'bahut'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:thoda|thoda|thora)\b'
+    replacement: 'thoda'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:nahi|nahin|nahee)\b'
+    replacement: 'nahi'
+    action: Replace
+    category: code_mixing
+  - pattern: '\b(?:abhi|abhee)\b'
+    replacement: 'abhi'
+    action: Replace
+    category: code_mixing
+
+  # Remove filler words
+  - pattern: '\b(?:umm|uhh|aah|err|hmm|like)\b'
+    replacement: ''
+    action: Remove
+    category: cleanup
+
+  # Punctuation spacing
+  - pattern: '\s*([.,!?;:])\s*'
+    replacement: '$1 '
+    action: Format
+    category: punctuation
+  - pattern: '\s+([.,!?;:])'
+    replacement: '$1'
+    action: Format
+    category: punctuation
