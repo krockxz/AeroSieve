@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SinkConfig {
     pub staging_dir: PathBuf,
     pub clean_dir: PathBuf,

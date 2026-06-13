@@ -10,7 +10,7 @@ pub use aerosieve_lexical;
 pub use aerosieve_ring;
 pub use aerosieve_sink;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PipelineConfig {
     pub ring_capacity: usize,
     pub sieve_config: SieveConfig,
