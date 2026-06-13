@@ -107,7 +107,7 @@ impl RuleEngine {
     pub fn empty() -> Self {
         Self {
             rules: Vec::new(),
-            keywords: AhoCorasick::new(&[""]).expect("empty AC"),
+            keywords: AhoCorasick::new(&["\x00"]).expect("empty AC"),
             keyword_map: Vec::new(),
         }
     }

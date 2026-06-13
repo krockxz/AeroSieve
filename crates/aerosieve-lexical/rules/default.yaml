@@ -108,7 +108,7 @@ rules:
     action: Remove
     category: cleanup
   - pattern: '&[a-z]+;'
-    replacement: ' '
+    replacement: ''
     action: Remove
     category: cleanup
 
@@ -147,7 +147,7 @@ rules:
     replacement: 'bahut'
     action: Replace
     category: code_mixing
-  - pattern: '\b(?:thoda|thoda|thora)\b'
+  - pattern: '\b(?:thoda|thora)\b'
     replacement: 'thoda'
     action: Replace
     category: code_mixing
