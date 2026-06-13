@@ -47,6 +47,10 @@ impl SlotFlags {
     pub fn set(&mut self, other: Self) {
         self.0 |= other.0;
     }
+
+    pub fn remove(&mut self, other: Self) {
+        self.0 &= !other.0;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +84,8 @@ impl AudioChunk {
     }
 
     pub fn audio_as_bytes(&self) -> &[u8] {
-        let len = self.audio_samples.len() * size_of::<f32>();
+        let len = self.audio_samples.len().checked_mul(size_of::<f32>())
+            .expect("audio_samples length overflow");
         let ptr = self.audio_samples.as_ptr() as *const u8;
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -124,10 +129,6 @@ impl RingProducer {
         self.inner.try_push(chunk).map_err(|_| RingError)
     }
 
-    pub fn try_push(&mut self, chunk: AudioChunk) -> Result<(), RingError> {
-        self.inner.try_push(chunk).map_err(|_| RingError)
-    }
-
     pub fn is_full(&self) -> bool {
         self.inner.is_full()
     }
@@ -142,10 +143,6 @@ impl RingConsumer {
         self.inner.try_pop()
     }
 
-    pub fn try_pop(&mut self) -> Option<AudioChunk> {
-        self.inner.try_pop()
-    }
-
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
@@ -155,11 +152,13 @@ impl RingConsumer {
     }
 }
 
-impl Default for RingError {
-    fn default() -> Self {
-        Self
+impl fmt::Display for RingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ring buffer error")
     }
 }
+
+impl std::error::Error for RingError {}
 
 #[cfg(test)]
 mod tests {

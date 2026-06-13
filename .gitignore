@@ -1,5 +1,8 @@
 /target/
+/Cargo.lock
 /data/staging/*
 !/data/staging/.gitkeep
 /data/clean/*
 !/data/clean/.gitkeep
+/docs
+/.cargo/
