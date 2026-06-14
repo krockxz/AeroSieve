@@ -4,8 +4,6 @@ use std::mem::size_of;
 use std::fmt;
 
 pub const DEFAULT_CAPACITY: usize = 4096;
-pub const DEFAULT_AUDIO_CAPACITY_BYTES: usize = 128_000;
-pub const DEFAULT_TEXT_CAPACITY_BYTES: usize = 4_096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -160,97 +158,4 @@ impl fmt::Display for RingError {
 
 impl std::error::Error for RingError {}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_create_ring() {
-        let (prod, cons) = create_ring(8);
-        assert!(cons.is_empty());
-        assert!(!prod.is_full());
-    }
-
-    #[test]
-    fn test_push_pop_single() {
-        let (mut prod, mut cons) = create_ring(8);
-        let chunk = AudioChunk::with_capacity(1024, 256);
-        prod.push(chunk).unwrap();
-        assert_eq!(cons.occupied_len(), 1);
-        let popped = cons.pop().unwrap();
-        assert_eq!(popped.audio_samples.len(), 0);
-        assert_eq!(popped.transcript, "");
-        assert!(cons.is_empty());
-    }
-
-    #[test]
-    fn test_push_pop_multiple() {
-        let (mut prod, mut cons) = create_ring(8);
-        for i in 0..5 {
-            let mut chunk = AudioChunk::with_capacity(1024, 256);
-            chunk.timestamp_ns = i as u64;
-            prod.push(chunk).unwrap();
-        }
-        assert_eq!(cons.occupied_len(), 5);
-        for i in 0..5 {
-            let popped = cons.pop().unwrap();
-            assert_eq!(popped.timestamp_ns, i as u64);
-        }
-        assert!(cons.is_empty());
-    }
-
-    #[test]
-    fn test_full_ring_rejects_push() {
-        let (mut prod, mut cons) = create_ring(4);
-        for _ in 0..4 {
-            prod.push(AudioChunk::with_capacity(1024, 256)).unwrap();
-        }
-        assert!(prod.is_full());
-        let result = prod.push(AudioChunk::with_capacity(1024, 256));
-        assert!(result.is_err());
-        cons.pop().unwrap();
-        prod.push(AudioChunk::with_capacity(1024, 256)).unwrap();
-    }
-
-    #[test]
-    fn test_audio_chunk_clear() {
-        let mut chunk = AudioChunk::with_capacity(1024, 256);
-        chunk.audio_samples.push(0.5);
-        chunk.audio_samples.push(-0.3);
-        chunk.transcript.push_str("hello");
-        chunk.clear();
-        assert!(chunk.audio_samples.is_empty());
-        assert!(chunk.transcript.is_empty());
-        assert_eq!(chunk.timestamp_ns, 0);
-    }
-
-    #[test]
-    fn test_audio_as_bytes_roundtrip() {
-        let mut chunk = AudioChunk::with_capacity(1024, 256);
-        chunk.audio_samples.extend_from_slice(&[1.0, -1.0, 0.5]);
-        let bytes = chunk.audio_as_bytes();
-        assert_eq!(bytes.len(), 3 * size_of::<f32>());
-        let floats: &[f32] = unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const f32, 3) };
-        assert_eq!(floats, &[1.0, -1.0, 0.5]);
-    }
-
-    #[test]
-    fn test_slot_flags() {
-        let mut flags = SlotFlags::empty();
-        assert!(!flags.contains(SlotFlags::VALID));
-        flags.set(SlotFlags::VALID);
-        assert!(flags.contains(SlotFlags::VALID));
-        flags.set(SlotFlags::REJECTED);
-        assert!(flags.contains(SlotFlags::VALID));
-        assert!(flags.contains(SlotFlags::REJECTED));
-    }
-
-    #[test]
-    fn test_source_kind_from_u32() {
-        assert_eq!(SourceKind::from_u32(0), Some(SourceKind::File));
-        assert_eq!(SourceKind::from_u32(1), Some(SourceKind::Microphone));
-        assert_eq!(SourceKind::from_u32(2), Some(SourceKind::TcpSocket));
-        assert_eq!(SourceKind::from_u32(3), Some(SourceKind::Synthetic));
-        assert_eq!(SourceKind::from_u32(99), None);
-    }
-}

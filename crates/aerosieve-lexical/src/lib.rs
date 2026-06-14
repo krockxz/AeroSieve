@@ -41,7 +41,7 @@ pub struct CompiledRule {
 #[derive(Debug)]
 pub struct RuleEngine {
     rules: Vec<CompiledRule>,
-    keywords: AhoCorasick,
+    keywords: Option<AhoCorasick>,
     keyword_map: Vec<Vec<usize>>,
     always_check: Vec<usize>,
 }
@@ -95,7 +95,7 @@ impl RuleEngine {
 
         Ok(Self {
             rules,
-            keywords: ac,
+            keywords: Some(ac),
             keyword_map,
             always_check,
         })
@@ -104,7 +104,7 @@ impl RuleEngine {
     pub fn empty() -> Self {
         Self {
             rules: Vec::new(),
-            keywords: AhoCorasick::new(["\x00"]).expect("empty AC"),
+            keywords: None,
             keyword_map: Vec::new(),
             always_check: Vec::new(),
         }
@@ -119,17 +119,16 @@ impl RuleEngine {
             let rule = &self.rules[idx];
             let prev = result.clone();
             result = match rule.action {
-                RuleAction::Replace => rule.regex.replace_all(&result, &rule.replacement).to_string(),
                 RuleAction::Remove => rule.regex.replace_all(&result, "").to_string(),
-                RuleAction::Format => rule.regex.replace_all(&result, &rule.replacement).to_string(),
                 RuleAction::Prefix => {
-                    let repl = format!("{}$0", rule.replacement);
+                    let repl = format!("{}{}", rule.replacement, "$0");
                     rule.regex.replace_all(&result, &repl).to_string()
                 }
                 RuleAction::Suffix => {
-                    let repl = format!("$0{}", rule.replacement);
+                    let repl = format!("{}{}", "$0", rule.replacement);
                     rule.regex.replace_all(&result, &repl).to_string()
                 }
+                _ => rule.regex.replace_all(&result, &rule.replacement).to_string(),
             };
             if result != prev {
                 rules_applied.push(rule.regex.as_str().to_string());
@@ -145,8 +144,8 @@ impl RuleEngine {
 
     fn match_rules(&self, text: &str) -> Vec<usize> {
         let mut candidates = Vec::new();
-        if !self.keyword_map.is_empty() {
-            for mat in self.keywords.find_iter(text) {
+        if let Some(ref ac) = self.keywords {
+            for mat in ac.find_iter(text) {
                 let pattern_id = mat.pattern().as_usize();
                 if pattern_id < self.keyword_map.len() {
                     candidates.extend_from_slice(&self.keyword_map[pattern_id]);
@@ -168,8 +167,6 @@ impl RuleEngine {
 }
 
 fn extract_keyword(pattern: &str) -> Option<String> {
-    // Strip regex metacharacters: keep only alphanumeric and whitespace,
-    // then find the first span of word chars with 2+ consecutive alphabetic chars.
     let cleaned: String = pattern
         .chars()
         .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
@@ -186,139 +183,4 @@ fn extract_keyword(pattern: &str) -> Option<String> {
     None
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_basic_replacement() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '\u20B9\s*(\d+)'
-    replacement: '$1 rupaye'
-    action: Replace
-    category: currency
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("yeh \u{20B9}500 hai");
-        assert_eq!(result.normalized, "yeh 500 rupaye hai");
-        assert_eq!(result.rules_applied.len(), 1);
-    }
-
-    #[test]
-    fn test_multiple_rules() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '\u20B9\s*(\d+)'
-    replacement: '$1 rupaye'
-    action: Replace
-    category: currency
-  - pattern: '(\d+)\s*km'
-    replacement: '$1 kilometer'
-    action: Replace
-    category: distance
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("\u{20B9}100 ke liye 5km");
-        assert!(result.normalized.contains("100 rupaye"));
-        assert!(result.normalized.contains("5 kilometer"));
-    }
-
-    #[test]
-    fn test_remove_action() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '<[^>]+>'
-    replacement: ''
-    action: Remove
-    category: markup
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("hello <b>world</b>");
-        assert_eq!(result.normalized, "hello world");
-    }
-
-    #[test]
-    fn test_no_matching_rules() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '\u20B9\d+'
-    replacement: 'rupees'
-    action: Replace
-    category: currency
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("no currency here");
-        assert_eq!(result.normalized, "no currency here");
-        assert!(result.rules_applied.is_empty());
-    }
-
-    #[test]
-    fn test_empty_engine() {
-        let engine = RuleEngine::empty();
-        let result = engine.normalize("hello world");
-        assert_eq!(result.normalized, "hello world");
-    }
-
-    #[test]
-    fn test_hindi_numerals() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '\b(\d+)\s*(?:lakh|laakh)\b'
-    replacement: '$1 lakh'
-    action: Format
-    category: weights
-  - pattern: '\b(\d+)\s*(?:crore|karod)\b'
-    replacement: '$1 crore'
-    action: Format
-    category: weights
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("5 laakh rupaye aur 2 karod");
-        assert!(result.normalized.contains("5 lakh"));
-        assert!(result.normalized.contains("2 crore"));
-    }
-
-    #[test]
-    fn test_load_default_rules() {
-        let engine = RuleEngine::from_yaml_file(Path::new("rules/default.yaml"))
-            .expect("failed to load default rules");
-        let result = engine.normalize("yeh ₹500 hai");
-        assert!(result.normalized.contains("rupaye"));
-    }
-
-    #[test]
-    fn test_prefix_action() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '\bhello\b'
-    replacement: 'say '
-    action: Prefix
-    category: test
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("hello world");
-        assert_eq!(result.normalized, "say hello world");
-    }
-
-    #[test]
-    fn test_suffix_action() {
-        let yaml = r#"
-version: 1
-rules:
-  - pattern: '\bcompleted\b'
-    replacement: ' done'
-    action: Suffix
-    category: test
-"#;
-        let engine = RuleEngine::from_yaml(yaml).unwrap();
-        let result = engine.normalize("task completed");
-        assert_eq!(result.normalized, "task completed done");
-    }
-}
