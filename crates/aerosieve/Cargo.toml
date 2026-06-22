@@ -13,6 +13,7 @@ aerosieve-sink = { path = "../aerosieve-sink" }
 [dev-dependencies]
 criterion = "0.5"
 uuid = { version = "1", features = ["v4"] }
+sysinfo = "0.35"
 
 [[bench]]
 name = "pipeline_benchmark"

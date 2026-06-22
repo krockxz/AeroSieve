@@ -1,6 +1,6 @@
 use aerosieve_acoustic::{AcousticSieve, SieveConfig, SieveResult};
 use aerosieve_lexical::{NormalizedText, RuleEngine};
-use aerosieve_ring::{create_ring, AudioChunk, RingConsumer, RingProducer, SlotFlags, SourceKind};
+use aerosieve_ring::{create_ring, AudioChunk, RingConsumer, RingProducer, SlotFlags};
 use aerosieve_sink::{Sink, SinkConfig};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use aerosieve_acoustic;
 pub use aerosieve_lexical;
 pub use aerosieve_ring;
+pub use aerosieve_ring::SourceKind;
 pub use aerosieve_sink;
 
 #[derive(Debug, Clone)]
@@ -160,6 +161,95 @@ impl Pipeline {
 
     pub fn stats(&self) -> &PipelineStats {
         &self.stats
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aerosieve_sink::SinkMode;
+    use std::fs;
+    use uuid::Uuid;
+
+    fn temp_config() -> PipelineConfig {
+        let base = std::env::temp_dir().join(format!(
+            "aerosieve-test-{}",
+            Uuid::new_v4()
+        ));
+        let mut rules_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        rules_path.push("../aerosieve-lexical/rules/default.yaml");
+        PipelineConfig {
+            ring_capacity: 64,
+            sieve_config: SieveConfig {
+                noise_window_samples: 0,
+                ..SieveConfig::default()
+            },
+            rules_path,
+            sink_config: SinkConfig {
+                staging_dir: base.join("staging"),
+                clean_dir: base.join("clean"),
+                mode: SinkMode::File,
+            },
+        }
+    }
+
+    #[test]
+    fn test_pipeline_sine_wave_passes() {
+        let config = temp_config();
+        let base = config.sink_config.staging_dir.parent().unwrap().to_path_buf();
+        let mut pipeline = Pipeline::new(config).unwrap();
+
+        let audio: Vec<f32> = (0..320).map(|i| (i as f32 * 0.1).sin() * 0.5).collect();
+        pipeline
+            .push_chunk(SourceKind::Synthetic, audio, "hello world".into())
+            .unwrap();
+
+        let results = pipeline.process_all();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].passed);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_pipeline_silence_rejected() {
+        let config = temp_config();
+        let base = config.sink_config.staging_dir.parent().unwrap().to_path_buf();
+        let mut pipeline = Pipeline::new(config).unwrap();
+
+        let silence = vec![0.0f32; 320];
+        pipeline
+            .push_chunk(SourceKind::Synthetic, silence, "nothing".into())
+            .unwrap();
+
+        let results = pipeline.process_all();
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].passed);
+        assert_eq!(pipeline.stats().frames_rejected, 1);
+        assert_eq!(pipeline.stats().frames_passed, 0);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_pipeline_normalizes_text() {
+        let config = temp_config();
+        let base = config.sink_config.staging_dir.parent().unwrap().to_path_buf();
+        let mut pipeline = Pipeline::new(config).unwrap();
+
+        let audio: Vec<f32> = (0..320).map(|i| (i as f32 * 0.1).sin() * 0.5).collect();
+        pipeline
+            .push_chunk(SourceKind::Synthetic, audio, "yeh \u{20B9}500 hai".into())
+            .unwrap();
+
+        let results = pipeline.process_all();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].passed);
+        let norm = results[0].normalized_text.as_ref().unwrap();
+        assert!(norm.normalized.contains("rupaye"));
+        assert!(pipeline.stats().norm_rules_applied > 0);
+
+        let _ = fs::remove_dir_all(&base);
     }
 }
 

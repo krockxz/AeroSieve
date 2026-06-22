@@ -130,4 +130,80 @@ impl Default for AcousticSieve {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_silence_is_rejected() {
+        let sieve = AcousticSieve::default();
+        let silence = vec![0.0f32; 320];
+        let result = sieve.analyze(&silence);
+        assert!(!result.pass);
+        assert_eq!(result.reject_reason, Some(RejectReason::Silence));
+    }
+
+    #[test]
+    fn test_normal_speech_passes() {
+        let mut config = SieveConfig::default();
+        config.noise_window_samples = 32;
+        let sieve = AcousticSieve::new(config);
+        let mut signal = vec![0.001f32; 320];
+        for i in 32..320 {
+            signal[i] = ((i as f32 - 32.0) * 0.1).sin() * 0.5;
+        }
+        let result = sieve.analyze(&signal);
+        assert!(result.pass);
+        assert!(result.rms_db > -20.0);
+        assert!(result.rms_db < 0.0);
+    }
+
+    #[test]
+    fn test_clipping_is_rejected() {
+        let mut config = SieveConfig::default();
+        config.silence_threshold_db = -60.0;
+        config.clip_ratio_threshold = 0.001;
+        config.noise_window_samples = 0;
+        let sieve = AcousticSieve::new(config);
+        let mut clipped = vec![0.5f32; 320];
+        clipped[0] = 1.0;
+        clipped[1] = -1.0;
+        clipped[2] = 0.999;
+        let result = sieve.analyze(&clipped);
+        assert!(!result.pass);
+        assert_eq!(result.reject_reason, Some(RejectReason::Clipping));
+    }
+
+    #[test]
+    fn test_empty_buffer() {
+        let sieve = AcousticSieve::default();
+        let result = sieve.analyze(&[]);
+        assert!(!result.pass);
+        assert_eq!(result.reject_reason, Some(RejectReason::Silence));
+    }
+
+    #[test]
+    fn test_rms_db_helper() {
+        let signal = vec![0.5f32; 100];
+        let db = AcousticSieve::rms_db(&signal);
+        assert!((db - 20.0 * 0.5f32.log10()).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_low_snr_is_rejected() {
+        let mut config = SieveConfig::default();
+        config.silence_threshold_db = -60.0;
+        config.min_snr_db = 40.0;
+        config.noise_window_samples = 20;
+        let sieve = AcousticSieve::new(config);
+        let mut signal = vec![0.0f32; 320];
+        signal[..20].copy_from_slice(&vec![0.1; 20]);
+        signal[20..].copy_from_slice(&vec![0.15; 300]);
+        let result = sieve.analyze(&signal);
+        assert!(!result.pass);
+        assert!(result.snr_db < 40.0);
+        assert!(!result.snr_db.is_infinite());
+    }
+}
+
 
