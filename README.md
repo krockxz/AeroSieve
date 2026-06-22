@@ -19,20 +19,46 @@ AeroSieve shows the alternative: a deterministic, auditable Rust pipeline that d
 ## Architecture
 
 ```mermaid
-graph TD
-    Input[Speech + Text Stream] -->|AudioChunk| RingBus[1. SPSC Ring Buffer]
-    RingBus -->|f32 slice| Sieve[2. Acoustic Sieve]
-    Sieve -->|Pass/Reject Gate| Norm[3. Lexical Normalizer]
-    Norm -->|Normalized Hinglish| Sink[4. Zero-Copy Sink]
-    Sink -->|hard_link| Disk[(Clean Storage)]
+flowchart LR
+    subgraph Input[Audio Sources]
+        SRC[File / Microphone / TCP Socket]
+    end
+
+    subgraph Pipeline[AeroSieve Pipeline]
+        direction TB
+        RB[("① Ring Buffer\nSPSC · Lock-Free\n~21 ns push/pop")]
+        AS{"② Acoustic Sieve\nRMS · SNR · Clip\n~750 ns / frame"}
+        LE["③ Lexical Engine\nAho-Corasick + 43 Rules\n~2.6 µs / sentence"]
+        ZC["④ Zero-Copy Sink\nStaging → hard_link → rename\n~9 ms (disk-bound)"]
+    end
+
+    SRC -->|"AudioChunk\n320 f32 @ 16kHz"| RB
+    RB -->|"f32[320] slice"| AS
+    AS -->|"reject silence/noise/clip"| RJ
+    AS -->|"pass"| LE
+    LE -->|"normalized text"| ZC
+    ZC -->|"atomic commit"| ST
+
+    RJ(("✗ Discard"))
+    ST[("Clean Storage")]
+
+    style SRC fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    style RB fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    style AS fill:#fff3e0,stroke:#e65100,color:#bf360c
+    style LE fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    style ZC fill:#fce4ec,stroke:#c62828,color:#b71c1c
+    style RJ fill:#ffebee,stroke:#c62828,color:#c62828
+    style ST fill:#e8f5e9,stroke:#1b5e20,color:#1b5e20
 ```
 
-| Phase                           | Responsibility                                           | Key Design Choice                                                    |
-| :------------------------------ | :------------------------------------------------------- | :------------------------------------------------------------------- |
-| **1. Ring Buffer**        | Move chunks between producer and consumer without copies | `ringbuf` lock-free SPSC, `AudioChunk` carries `&[f32]` slices |
-| **2. Acoustic Sieve**     | Reject silence, low-SNR, and clipped frames              | Pure math: RMS, SNR against a leading noise window, clip ratio       |
-| **3. Lexical Normalizer** | Normalize Hinglish, currencies, abbreviations            | Aho-Corasick keyword pre-filter + compiled regex rules from YAML     |
-| **4. Zero-Copy Sink**     | Commit accepted pairs atomically                         | Staging directory +`hard_link` (fallback to `rename`)            |
+**Why this matters for voice AI** — ElevenLabs-quality voice synthesis starts with clean training data. AeroSieve's acoustic gate deterministically rejects silence, noise, and clipped audio before it reaches storage, while the lexical engine normalizes code-mixed text through compiled rules — no ML overhead, no Python regex bottlenecks, just predictable sub-100µs compute.
+
+| Phase | Responsibility | Key Design Choice |
+| :---- | :------------- | :---------------- |
+| **① Ring Buffer** | Move chunks between producer and consumer without copies | `ringbuf` lock-free SPSC, `AudioChunk` carries `&[f32]` slices |
+| **② Acoustic Sieve** | Reject silence, low-SNR, and clipped frames | Pure math: RMS, SNR against a leading noise window, clip ratio |
+| **③ Lexical Engine** | Normalize Hinglish, currencies, abbreviations | Aho-Corasick keyword pre-filter + compiled regex rules from YAML |
+| **④ Zero-Copy Sink** | Commit accepted pairs atomically | Staging directory + `hard_link` (fallback to `rename`) |
 
 ---
 
