@@ -57,12 +57,12 @@ flowchart LR
 
 **Why this matters for voice AI** — ElevenLabs-quality voice synthesis starts with clean training data. AeroSieve's acoustic gate deterministically rejects silence, noise, and clipped audio before it reaches storage, while the lexical engine normalizes code-mixed text through compiled rules — no ML overhead, no Python regex bottlenecks, just predictable sub-100µs compute.
 
-| Phase | Responsibility | Key Design Choice |
-| :---- | :------------- | :---------------- |
-| **① Ring Buffer** | Move chunks between producer and consumer without copies | `ringbuf` lock-free SPSC, `AudioChunk` carries `&[f32]` slices |
-| **② Acoustic Sieve** | Reject silence, low-SNR, and clipped frames | Pure math: RMS, SNR against a leading noise window, clip ratio |
-| **③ Lexical Engine** | Normalize Hinglish, currencies, abbreviations | Aho-Corasick keyword pre-filter + compiled regex rules from YAML |
-| **④ Zero-Copy Sink** | Commit accepted pairs atomically | Staging directory + `hard_link` (fallback to `rename`) |
+| Phase                       | Responsibility                                           | Key Design Choice                                                    |
+| :-------------------------- | :------------------------------------------------------- | :------------------------------------------------------------------- |
+| **① Ring Buffer**    | Move chunks between producer and consumer without copies | `ringbuf` lock-free SPSC, `AudioChunk` carries `&[f32]` slices |
+| **② Acoustic Sieve** | Reject silence, low-SNR, and clipped frames              | Pure math: RMS, SNR against a leading noise window, clip ratio       |
+| **③ Lexical Engine** | Normalize Hinglish, currencies, abbreviations            | Aho-Corasick keyword pre-filter + compiled regex rules from YAML     |
+| **④ Zero-Copy Sink** | Commit accepted pairs atomically                         | Staging directory +`hard_link` (fallback to `rename`)            |
 
 ---
 
@@ -189,5 +189,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 * **Zero-copy where it matters.** Audio bytes are written once; downstream stages receive pointers/slices.
 * **Hot-reloadable rules.** The lexical engine compiles YAML rules at startup and can be reloaded without restarting the pipeline.
 * **Production error handling.** No panics in the hot path; `Result` flows everywhere; sink commits fall back from `hard_link` → `rename` → copy.
-
-See [`docs/superpowers/specs/2026-06-12-aerosieve-design.md`](./docs/superpowers/specs/2026-06-12-aerosieve-design.md) for the full specification.
