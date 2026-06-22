@@ -36,12 +36,12 @@ flowchart LR
         ZC["Staging → hard_link\n~9 ms disk-bound"]
     end
 
-    SRC -->|AudioChunk| RB
-    RB -->|f32[320]| AS
-    AS -->|reject| RJ
-    AS -->|pass| LE
-    LE -->|normalized| ZC
-    ZC -->|commit| ST
+    SRC -->|"AudioChunk"| RB
+    RB -->|"320 f32 samples"| AS
+    AS -->|"reject"| RJ
+    AS -->|"pass"| LE
+    LE -->|"normalized text"| ZC
+    ZC -->|"atomic commit"| ST
 
     RJ(("✗"))
     ST[("Clean Storage")]
