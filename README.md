@@ -21,25 +21,29 @@ AeroSieve shows the alternative: a deterministic, auditable Rust pipeline that d
 ```mermaid
 flowchart LR
     subgraph Input[Audio Sources]
-        SRC[File / Microphone / TCP Socket]
+        SRC[File / Mic / TCP]
+    end
+    subgraph Ring[① Ring Buffer]
+        RB[("SPSC Lock-Free\n~21 ns push/pop")]
+    end
+    subgraph Sieve[② Acoustic Sieve]
+        AS{"RMS · SNR · Clip\n~750 ns / frame"}
+    end
+    subgraph Lex[③ Lexical Engine]
+        LE["Aho-Corasick + Rules\n~2.6 µs / sentence"]
+    end
+    subgraph Sink[④ Zero-Copy Sink]
+        ZC["Staging → hard_link\n~9 ms disk-bound"]
     end
 
-    subgraph Pipeline[AeroSieve Pipeline]
-        direction TB
-        RB[("① Ring Buffer\nSPSC · Lock-Free\n~21 ns push/pop")]
-        AS{"② Acoustic Sieve\nRMS · SNR · Clip\n~750 ns / frame"}
-        LE["③ Lexical Engine\nAho-Corasick + 43 Rules\n~2.6 µs / sentence"]
-        ZC["④ Zero-Copy Sink\nStaging → hard_link → rename\n~9 ms (disk-bound)"]
-    end
+    SRC -->|AudioChunk| RB
+    RB -->|f32[320]| AS
+    AS -->|reject| RJ
+    AS -->|pass| LE
+    LE -->|normalized| ZC
+    ZC -->|commit| ST
 
-    SRC -->|"AudioChunk\n320 f32 @ 16kHz"| RB
-    RB -->|"f32[320] slice"| AS
-    AS -->|"reject silence/noise/clip"| RJ
-    AS -->|"pass"| LE
-    LE -->|"normalized text"| ZC
-    ZC -->|"atomic commit"| ST
-
-    RJ(("✗ Discard"))
+    RJ(("✗"))
     ST[("Clean Storage")]
 
     style SRC fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
